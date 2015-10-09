@@ -153,7 +153,7 @@ module Resque
         File.open(ENV['PIDFILE'], 'w') { |f| f << pid }
       end
 
-      @queues = queues.map { |queue| queue.to_s.strip }
+      init_queues_and_blacklist(queues)
       @shutdown = nil
       @paused = nil
       validate_queues
@@ -167,6 +167,12 @@ module Resque
       if @queues.nil? || @queues.empty?
         raise NoQueueError.new("Please give each worker at least one queue.")
       end
+    end
+
+    # Separates the blacklisted queues from the permitted ones and initializes
+    # the related instance variables
+    def init_queues_and_blacklist(queues)
+      @blacklist, @queues = queues.map { |queue| queue.to_s.strip }.partition { |queue| queue[0] == '!' }
     end
 
     # This is the main workhorse method. Called on a Worker instance,
@@ -336,8 +342,13 @@ module Resque
 
     def glob_match(pattern)
       Resque.queues.select do |queue|
-        File.fnmatch?(pattern, queue)
+        File.fnmatch?(pattern, queue) && !blacklisted_queue?(queue)
       end.sort
+    end
+
+    def blacklisted_queue?(queue)
+      return false if @blacklist.empty?
+      @blacklist.any? { |i| i.include?(queue) }
     end
 
     # Not every platform supports fork. Here we do our magic to

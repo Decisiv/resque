@@ -324,6 +324,38 @@ context "Resque::Worker" do
     assert_equal 0, Resque.size(:test_two)
   end
 
+  test "allows blacklisted queues" do
+    Resque::Job.create(:critical, GoodJob)
+    Resque::Job.create(:test_one, GoodJob)
+    Resque::Job.create(:test_two, GoodJob)
+
+    worker = Resque::Worker.new("test_one", "test_two", "!critical")
+
+    worker.work(0)
+    assert_equal 1, Resque.size(:critical)
+    assert_equal 0, Resque.size(:test_one)
+    assert_equal 0, Resque.size(:test_two)
+  end
+
+  test "allows blacklisted queues with globs" do
+    Resque::Job.create(:critical, GoodJob)
+    Resque::Job.create(:test_one, GoodJob)
+    Resque::Job.create(:test_two, GoodJob)
+
+    worker = Resque::Worker.new("*", "!critical")
+
+    worker.work(0)
+    assert_equal 1, Resque.size(:critical)
+    assert_equal 0, Resque.size(:test_one)
+    assert_equal 0, Resque.size(:test_two)
+  end
+
+  test "complains if all queues are blacklisted" do
+    assert_raises Resque::NoQueueError do
+      Resque::Worker.new("!critical")
+    end
+  end
+
   test "has a unique id" do
     assert_equal "#{`hostname`.chomp}:#{$$}:jobs", @worker.to_s
   end
